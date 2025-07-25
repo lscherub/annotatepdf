@@ -847,24 +847,45 @@
         }
 
         function updateEmbedCode() {
-            if (!pdfDoc || annotations.length === 0) {
-                document.getElementById('embedCode').textContent = 'Upload a PDF and add some links first!';
+            if (!pdfDoc) {
+                document.getElementById('embedCode').textContent = 'Upload a PDF first!';
                 return;
             }
             
-            const embedCode = `<iframe src="data:text/html;base64,${btoa(generateEmbedHTML())}" width="800" height="600" frameborder="0" style="border: 1px solid #ddd; border-radius: 8px;" title="Interactive PDF Viewer"></iframe>`;
-            document.getElementById('embedCode').textContent = embedCode;
+            if (annotations.length === 0) {
+                document.getElementById('embedCode').textContent = 'Add at least one link to generate embed code!';
+                return;
+            }
+            
+            try {
+                const embedHTML = generateEmbedHTML();
+                const embedCode = `<iframe src="data:text/html;base64,${btoa(embedHTML)}" width="800" height="600" frameborder="0" style="border: 1px solid #ddd; border-radius: 8px;" title="Interactive PDF Viewer"></iframe>`;
+                document.getElementById('embedCode').textContent = embedCode;
+            } catch (error) {
+                console.error('Error generating embed code:', error);
+                document.getElementById('embedCode').textContent = 'Error generating embed code. Please try re-uploading your PDF.';
+                showMessage('Error generating embed code. Please try again.', true);
+            }
         }
 
         function generateEmbedHTML() {
+            if (!pdfArrayBuffer || !annotations.length) {
+                throw new Error('No PDF data or annotations available');
+            }
+            
             const pdfData = pdfToBase64();
+            if (!pdfData) {
+                throw new Error('Failed to convert PDF to base64');
+            }
+            
             const annotationsData = JSON.stringify(annotations);
+            const safeFileName = (originalFileName || 'Interactive PDF').replace(/[<>"'&]/g, '');
             
             return `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Interactive PDF Viewer - ${originalFileName}</title>
+    <title>Interactive PDF Viewer - ${safeFileName}</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"><\/script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1000,7 +1021,7 @@
 </head>
 <body>
     <div class="viewer-header">
-        <div class="viewer-title">📄 ${originalFileName || 'Interactive PDF'}</div>
+        <div class="viewer-title">📄 ${safeFileName}</div>
         <div class="viewer-controls">
             <button class="viewer-btn" onclick="previousPage()" id="prevBtn">← Prev</button>
             <span id="pageInfo">Page 1 of 1</span>
@@ -1039,6 +1060,10 @@
         async function loadPDF() {
             try {
                 const pdfData = '${pdfData}';
+                if (!pdfData) {
+                    throw new Error('No PDF data available');
+                }
+                
                 const binaryString = atob(pdfData);
                 const bytes = new Uint8Array(binaryString.length);
                 for (let i = 0; i < binaryString.length; i++) {
@@ -1146,18 +1171,31 @@
         }
 
         function pdfToBase64() {
-            if (!pdfArrayBuffer) return null;
-            let binary = '';
-            const bytes = new Uint8Array(pdfArrayBuffer);
-            for (let i = 0; i < bytes.byteLength; i++) {
-                binary += String.fromCharCode(bytes[i]);
+            if (!pdfArrayBuffer) {
+                console.error('No PDF array buffer available');
+                return null;
             }
-            return btoa(binary);
+            
+            try {
+                let binary = '';
+                const bytes = new Uint8Array(pdfArrayBuffer);
+                const chunkSize = 0x8000; // 32KB chunks to avoid call stack issues
+                
+                for (let i = 0; i < bytes.length; i += chunkSize) {
+                    const chunk = bytes.subarray(i, i + chunkSize);
+                    binary += String.fromCharCode.apply(null, chunk);
+                }
+                
+                return btoa(binary);
+            } catch (error) {
+                console.error('Error converting PDF to base64:', error);
+                return null;
+            }
         }
 
         function copyEmbedCode() {
             const embedCode = document.getElementById('embedCode').textContent;
-            if (embedCode === 'Upload a PDF and add some links first!') {
+            if (embedCode.includes('Upload a PDF') || embedCode.includes('Add at least one link') || embedCode.includes('Error generating')) {
                 showMessage('Please upload a PDF and add some links first!', true);
                 return;
             }
@@ -1165,7 +1203,13 @@
             navigator.clipboard.writeText(embedCode).then(() => {
                 showMessage('Embed code copied to clipboard!');
             }).catch(() => {
-                showMessage('Failed to copy. Please select and copy manually.', true);
+                // Fallback: select the text for manual copying
+                const embedElement = document.getElementById('embedCode');
+                const range = document.createRange();
+                range.selectNode(embedElement);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                showMessage('Embed code selected. Press Ctrl+C (or Cmd+C) to copy.', true);
             });
         }
 
@@ -1175,19 +1219,24 @@
                 return;
             }
             
-            const htmlContent = generateEmbedHTML();
-            const blob = new Blob([htmlContent], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
-            
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `interactive-${originalFileName.replace('.pdf', '')}.html`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            showMessage('HTML file downloaded successfully!');
+            try {
+                const htmlContent = generateEmbedHTML();
+                const blob = new Blob([htmlContent], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `interactive-${(originalFileName || 'pdf').replace('.pdf', '')}.html`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showMessage('HTML file downloaded successfully!');
+            } catch (error) {
+                console.error('Error downloading file:', error);
+                showMessage('Error creating download. Please try again.', true);
+            }
         }
 
         // Add pulse animation for highlighting
