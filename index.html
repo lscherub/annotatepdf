@@ -2,317 +2,686 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Link Annotator</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; }
-        canvas { border: 1px solid #ccc; display: block; margin-top: 20px; }
-        #embedCode { width: 100%; height: 100px; }
-        .annotation-box { position: absolute; border: 2px dashed red; pointer-events: none; }
-        #annotationForm { display: none; margin-top: 10px; }
-        #annotationsList { margin-top: 10px; }
-        #overlayContainer { position: relative; display: inline-block; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .upload-section {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: linear-gradient(45deg, #f8f9ff, #e8edff);
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: linear-gradient(45deg, #f0f4ff, #e0e8ff);
+            transform: translateY(-2px);
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: linear-gradient(45deg, #e8f0ff, #d8e4ff);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            color: #667eea;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .upload-text {
+            font-size: 1.2rem;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        .upload-subtext {
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .pdf-viewer {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        #pdfCanvas {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            cursor: crosshair;
+            max-width: 100%;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .annotation-form {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .annotations-list {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .annotation-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .annotation-item h4 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .annotation-item a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .annotation-item a:hover {
+            text-decoration: underline;
+        }
+
+        .embed-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .embed-code {
+            background: #f4f4f4;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            word-break: break-all;
+            margin-top: 10px;
+        }
+
+        .page-info {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #666;
+        }
+
+        .selection-overlay {
+            position: absolute;
+            border: 2px dashed #667eea;
+            background: rgba(102, 126, 234, 0.1);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
     </style>
 </head>
 <body>
-    <h2>PDF Link Annotator</h2>
-    <input type="file" id="fileInput" accept="application/pdf"><br><br>
-    <button id="clearBtn">Clear Project</button>
+    <div class="container">
+        <div class="header">
+            <h1>📄 PDF Link Annotator</h1>
+            <p>Upload PDFs, add clickable links, and embed anywhere</p>
+        </div>
 
-    <div id="overlayContainer">
-        <canvas id="pdfCanvas"></canvas>
+        <div class="upload-section">
+            <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                <span class="upload-icon">📁</span>
+                <div class="upload-text">Click to upload your PDF</div>
+                <div class="upload-subtext">or drag and drop it here</div>
+            </div>
+            <input type="file" id="fileInput" accept=".pdf">
+        </div>
+
+        <div class="pdf-viewer" id="pdfViewer">
+            <div class="controls">
+                <button class="btn" onclick="previousPage()" id="prevBtn">← Previous</button>
+                <span class="page-info" id="pageInfo">Page 1 of 1</span>
+                <button class="btn" onclick="nextPage()" id="nextBtn">Next →</button>
+                <button class="btn" onclick="zoomIn()">🔍 Zoom In</button>
+                <button class="btn" onclick="zoomOut()">🔍 Zoom Out</button>
+            </div>
+            <div style="position: relative; display: inline-block;">
+                <canvas id="pdfCanvas"></canvas>
+            </div>
+            
+            <div class="annotation-form" id="annotationForm">
+                <h3>Add Link to Selected Area</h3>
+                <div class="form-group">
+                    <label for="linkUrl">Link URL:</label>
+                    <input type="url" id="linkUrl" placeholder="https://example.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="linkTitle">Link Title (optional):</label>
+                    <input type="text" id="linkTitle" placeholder="Click here to visit...">
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn" onclick="saveAnnotation()">💾 Save Link</button>
+                    <button class="btn" onclick="cancelAnnotation()" style="background: #dc3545;">❌ Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="annotations-list" id="annotationsList">
+            <h3>📋 Added Links</h3>
+            <div id="annotationsContainer"></div>
+        </div>
+
+        <div class="embed-section" id="embedSection">
+            <h3>🌐 Embed Your Annotated PDF</h3>
+            <p>Copy this code to embed your annotated PDF on any website:</p>
+            <div class="embed-code" id="embedCode"></div>
+            <button class="btn" onclick="copyEmbedCode()" style="margin-top: 10px;">📋 Copy Embed Code</button>
+        </div>
     </div>
-
-    <div id="annotationForm">
-        <input type="text" id="linkTitle" placeholder="Link text (optional)">
-        <input type="url" id="linkUrl" placeholder="Enter URL" required>
-        <button onclick="saveAnnotation()">Save Link</button>
-    </div>
-
-    <div id="annotationsList"></div>
-
-    <h3>Embed Code:</h3>
-    <textarea id="embedCode" readonly></textarea>
 
     <script>
+        // PDF.js setup
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
         let pdfDoc = null;
-        let currentPage = 1;
-        let scale = 1.5;
-        let canvas, ctx;
+        let pageNum = 1;
+        let pageCount = 0;
+        let scale = 1.0;
+        let canvas = null;
+        let ctx = null;
+        let isSelecting = false;
+        let startX, startY, endX, endY;
+        let selectionOverlay = null;
         let annotations = [];
-        let startX, startY, currentSelection = null, selectionOverlay = null;
-        let pdfArrayBuffer = null;
+        let currentSelection = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            canvas = document.getElementById('pdfCanvas');
+            ctx = canvas.getContext('2d');
+            setupEventListeners();
+        });
 
         function setupEventListeners() {
-            const overlayContainer = document.getElementById('overlayContainer');
+            const fileInput = document.getElementById('fileInput');
+            const uploadArea = document.querySelector('.upload-area');
 
-            overlayContainer.addEventListener('mousedown', e => {
-                const rect = canvas.getBoundingClientRect();
-                startX = e.clientX - rect.left;
-                startY = e.clientY - rect.top;
+            fileInput.addEventListener('change', handleFileSelect);
+            
+            // Drag and drop
+            uploadArea.addEventListener('dragover', handleDragOver);
+            uploadArea.addEventListener('drop', handleDrop);
+            uploadArea.addEventListener('dragleave', handleDragLeave);
 
-                selectionOverlay = document.createElement('div');
-                selectionOverlay.className = 'annotation-box';
-                selectionOverlay.style.left = `${startX}px`;
-                selectionOverlay.style.top = `${startY}px`;
-                overlayContainer.appendChild(selectionOverlay);
-            });
-
-            overlayContainer.addEventListener('mousemove', e => {
-                if (!selectionOverlay) return;
-                const rect = canvas.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                const width = Math.abs(x - startX);
-                const height = Math.abs(y - startY);
-                selectionOverlay.style.left = `${Math.min(x, startX)}px`;
-                selectionOverlay.style.top = `${Math.min(y, startY)}px`;
-                selectionOverlay.style.width = `${width}px`;
-                selectionOverlay.style.height = `${height}px`;
-            });
-
-            overlayContainer.addEventListener('mouseup', () => {
-                if (!selectionOverlay) return;
-                const rect = selectionOverlay.getBoundingClientRect();
-                const canvasRect = canvas.getBoundingClientRect();
-                currentSelection = {
-                    x: (rect.left - canvasRect.left) / scale,
-                    y: (rect.top - canvasRect.top) / scale,
-                    width: rect.width / scale,
-                    height: rect.height / scale
-                };
-                document.getElementById('annotationForm').style.display = 'block';
-            });
-
-            document.getElementById('fileInput').addEventListener('change', handleFile);
-            document.getElementById('clearBtn').addEventListener('click', clearProject);
+            // Canvas selection
+            canvas.addEventListener('mousedown', startSelection);
+            canvas.addEventListener('mousemove', updateSelection);
+            canvas.addEventListener('mouseup', endSelection);
         }
 
-        function handleFile(event) {
-            const file = event.target.files[0];
-            const reader = new FileReader();
-            reader.onload = function(e) {
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.currentTarget.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type === 'application/pdf') {
+                handleFile(files[0]);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file && file.type === 'application/pdf') {
+                handleFile(file);
+            }
+        }
+
+        function handleFile(file) {
+            const fileReader = new FileReader();
+            fileReader.onload = function(e) {
                 const typedarray = new Uint8Array(e.target.result);
-                pdfArrayBuffer = typedarray;
-                annotations = [];
-                localStorage.removeItem('annotator_annotations');
-                localStorage.setItem('annotator_pdf', btoa([...typedarray].map(b => String.fromCharCode(b)).join('')));
                 loadPDF(typedarray);
             };
-            reader.readAsArrayBuffer(file);
+            fileReader.readAsArrayBuffer(file);
         }
 
-        function loadPDF(arrayBuffer) {
-            const loadingTask = pdfjsLib.getDocument(arrayBuffer);
-            loadingTask.promise.then(function(pdf) {
-                pdfDoc = pdf;
+        async function loadPDF(data) {
+            try {
+                pdfDoc = await pdfjsLib.getDocument(data).promise;
+                pageCount = pdfDoc.numPages;
+                pageNum = 1;
+                
+                document.getElementById('pdfViewer').style.display = 'block';
+                document.getElementById('annotationsList').style.display = 'block';
+                document.getElementById('embedSection').style.display = 'block';
+                
                 renderPage();
-            });
+                updatePageInfo();
+            } catch (error) {
+                alert('Error loading PDF: ' + error.message);
+            }
         }
 
-        function renderPage() {
-            pdfDoc.getPage(currentPage).then(function(page) {
-                const viewport = page.getViewport({ scale: scale });
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-                const renderContext = { canvasContext: ctx, viewport: viewport };
-                page.render(renderContext).promise.then(() => {
-                    renderAnnotations();
-                });
-            });
+        async function renderPage() {
+            const page = await pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: scale });
+            
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            
+            const renderContext = {
+                canvasContext: ctx,
+                viewport: viewport
+            };
+            
+            await page.render(renderContext).promise;
+            
+            // Re-render annotations for current page
+            renderAnnotations();
         }
 
         function renderAnnotations() {
-            const overlayContainer = document.getElementById('overlayContainer');
-            overlayContainer.querySelectorAll('.annotation-link').forEach(el => el.remove());
-
             annotations.forEach(annotation => {
-                const link = document.createElement('a');
-                link.className = 'annotation-link';
-                link.href = annotation.url;
-                link.textContent = annotation.title;
-                link.target = '_blank';
-                link.style.position = 'absolute';
-                link.style.left = `${annotation.x * scale}px`;
-                link.style.top = `${annotation.y * scale}px`;
-                link.style.width = `${annotation.width * scale}px`;
-                link.style.height = `${annotation.height * scale}px`;
-                link.style.border = '2px solid blue';
-                link.style.background = 'rgba(255,255,255,0.5)';
-                link.style.textAlign = 'center';
-                link.style.display = 'flex';
-                link.style.justifyContent = 'center';
-                link.style.alignItems = 'center';
-                link.style.color = 'blue';
-                link.style.fontWeight = 'bold';
-                link.style.textDecoration = 'none';
-                link.style.boxSizing = 'border-box';
-                overlayContainer.appendChild(link);
+                if (annotation.page === pageNum) {
+                    drawAnnotation(annotation);
+                }
             });
+        }
+
+        function drawAnnotation(annotation) {
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(annotation.x, annotation.y, annotation.width, annotation.height);
+            ctx.setLineDash([]);
+            
+            // Add link icon
+            ctx.fillStyle = '#667eea';
+            ctx.font = '16px Arial';
+            ctx.fillText('🔗', annotation.x + 5, annotation.y + 20);
+        }
+
+        function updatePageInfo() {
+            document.getElementById('pageInfo').textContent = `Page ${pageNum} of ${pageCount}`;
+            document.getElementById('prevBtn').disabled = pageNum <= 1;
+            document.getElementById('nextBtn').disabled = pageNum >= pageCount;
+        }
+
+        function previousPage() {
+            if (pageNum <= 1) return;
+            pageNum--;
+            renderPage();
+            updatePageInfo();
+        }
+
+        function nextPage() {
+            if (pageNum >= pageCount) return;
+            pageNum++;
+            renderPage();
+            updatePageInfo();
+        }
+
+        function zoomIn() {
+            scale += 0.25;
+            renderPage();
+        }
+
+        function zoomOut() {
+            if (scale > 0.5) {
+                scale -= 0.25;
+                renderPage();
+            }
+        }
+
+        // Selection functionality
+        function startSelection(e) {
+            const rect = canvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            isSelecting = true;
+            
+            // Remove existing overlay
+            if (selectionOverlay) {
+                selectionOverlay.remove();
+            }
+        }
+
+        function updateSelection(e) {
+            if (!isSelecting) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            endX = e.clientX - rect.left;
+            endY = e.clientY - rect.top;
+            
+            // Create or update selection overlay
+            if (!selectionOverlay) {
+                selectionOverlay = document.createElement('div');
+                selectionOverlay.className = 'selection-overlay';
+                canvas.parentElement.appendChild(selectionOverlay);
+            }
+            
+            const left = Math.min(startX, endX);
+            const top = Math.min(startY, endY);
+            const width = Math.abs(endX - startX);
+            const height = Math.abs(endY - startY);
+            
+            selectionOverlay.style.left = left + 'px';
+            selectionOverlay.style.top = top + 'px';
+            selectionOverlay.style.width = width + 'px';
+            selectionOverlay.style.height = height + 'px';
+        }
+
+        function endSelection(e) {
+            if (!isSelecting) return;
+            isSelecting = false;
+            
+            const rect = canvas.getBoundingClientRect();
+            endX = e.clientX - rect.left;
+            endY = e.clientY - rect.top;
+            
+            const width = Math.abs(endX - startX);
+            const height = Math.abs(endY - startY);
+            
+            // Only show form if selection is big enough
+            if (width > 10 && height > 10) {
+                currentSelection = {
+                    x: Math.min(startX, endX),
+                    y: Math.min(startY, endY),
+                    width: width,
+                    height: height,
+                    page: pageNum
+                };
+                
+                document.getElementById('annotationForm').style.display = 'block';
+                document.getElementById('linkUrl').focus();
+            } else {
+                cancelAnnotation();
+            }
         }
 
         function saveAnnotation() {
             const url = document.getElementById('linkUrl').value;
             const title = document.getElementById('linkTitle').value || 'Click here';
-
+            
             if (!url || !currentSelection) {
                 alert('Please enter a valid URL');
                 return;
             }
-
+            
             const annotation = {
                 ...currentSelection,
                 url: url,
                 title: title,
                 id: Date.now()
             };
-
+            
             annotations.push(annotation);
-            saveToLocalStorage();
-
+            
+            // Clear form
             document.getElementById('linkUrl').value = '';
             document.getElementById('linkTitle').value = '';
             document.getElementById('annotationForm').style.display = 'none';
-
+            
+            // Remove selection overlay
             if (selectionOverlay) {
                 selectionOverlay.remove();
                 selectionOverlay = null;
             }
-
+            
             currentSelection = null;
-
+            
+            // Re-render page with new annotation
             renderPage();
             updateAnnotationsList();
             updateEmbedCode();
+        }
+
+        function cancelAnnotation() {
+            document.getElementById('annotationForm').style.display = 'none';
+            document.getElementById('linkUrl').value = '';
+            document.getElementById('linkTitle').value = '';
+            
+            if (selectionOverlay) {
+                selectionOverlay.remove();
+                selectionOverlay = null;
+            }
+            
+            currentSelection = null;
+        }
+
+        function updateAnnotationsList() {
+            const container = document.getElementById('annotationsContainer');
+            container.innerHTML = '';
+            
+            annotations.forEach(annotation => {
+                const item = document.createElement('div');
+                item.className = 'annotation-item';
+                item.innerHTML = `
+                    <h4>${annotation.title}</h4>
+                    <p>Page ${annotation.page} - <a href="${annotation.url}" target="_blank">${annotation.url}</a></p>
+                    <button class="btn" onclick="removeAnnotation(${annotation.id})" style="background: #dc3545; padding: 8px 16px; font-size: 0.8rem; margin-top: 10px;">Remove</button>
+                `;
+                container.appendChild(item);
+            });
+            
+            if (annotations.length === 0) {
+                container.innerHTML = '<p style="color: #666; text-align: center;">No links added yet. Select an area on the PDF to add a link.</p>';
+            }
         }
 
         function removeAnnotation(id) {
             annotations = annotations.filter(annotation => annotation.id !== id);
-            saveToLocalStorage();
             renderPage();
             updateAnnotationsList();
             updateEmbedCode();
         }
 
-        function updateAnnotationsList() {
-            const listDiv = document.getElementById('annotationsList');
-            listDiv.innerHTML = '<h4>Annotations:</h4>';
-            annotations.forEach(a => {
-                const div = document.createElement('div');
-                div.innerHTML = `${a.title} (<a href="${a.url}" target="_blank">${a.url}</a>) <button onclick="removeAnnotation(${a.id})">Remove</button>`;
-                listDiv.appendChild(div);
-            });
-        }
-
         function updateEmbedCode() {
-            const iframeCode = `
-<iframe srcdoc="${generateEmbedHTML().replace(/"/g, '&quot;')}" width="100%" height="600px" frameborder="0"></iframe>
-            `.trim();
-            document.getElementById('embedCode').value = iframeCode;
+            const embedCode = `<iframe src="data:text/html;base64,${btoa(generateEmbedHTML())}" width="800" height="600" frameborder="0"></iframe>`;
+            document.getElementById('embedCode').textContent = embedCode;
         }
 
         function generateEmbedHTML() {
-            const base64 = pdfToBase64();
-            const annotationScript = `
-                const annotations = ${JSON.stringify(annotations)};
-                const scale = 1.5;
-
-                const canvas = document.createElement('canvas');
-                document.body.appendChild(canvas);
-                const ctx = canvas.getContext('2d');
-
-                const loadingTask = pdfjsLib.getDocument({ data: atob("${base64}") });
-                loadingTask.promise.then(pdf => {
-                    pdf.getPage(1).then(page => {
-                        const viewport = page.getViewport({ scale });
-                        canvas.width = viewport.width;
-                        canvas.height = viewport.height;
-
-                        const renderContext = { canvasContext: ctx, viewport };
-                        page.render(renderContext).promise.then(() => {
-                            annotations.forEach(a => {
-                                const link = document.createElement('a');
-                                link.href = a.url;
-                                link.target = '_blank';
-                                link.textContent = a.title;
-                                Object.assign(link.style, {
-                                    position: 'absolute',
-                                    left: a.x * scale + 'px',
-                                    top: a.y * scale + 'px',
-                                    width: a.width * scale + 'px',
-                                    height: a.height * scale + 'px',
-                                    border: '2px solid blue',
-                                    background: 'rgba(255,255,255,0.5)',
-                                    color: 'blue',
-                                    display: 'flex',
-                                    justifyContent: 'center',
-                                    alignItems: 'center',
-                                    fontWeight: 'bold',
-                                    textDecoration: 'none',
-                                    boxSizing: 'border-box'
-                                });
-                                document.body.appendChild(link);
-                            });
-                        });
-                    });
-                });
-            `;
-
+            // This would generate a standalone HTML version of the annotated PDF
+            // For simplicity, we'll create a basic version
             return `
-<html>
-<head>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
-</head>
-<body style="margin:0;position:relative;">
-<script>${annotationScript}</script>
-</body>
-</html>
-            `.trim();
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Annotated PDF</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; }
+                    .annotation { background: #f0f8ff; padding: 10px; margin: 10px 0; border-radius: 5px; }
+                </style>
+            </head>
+            <body>
+                <h2>Annotated PDF Links</h2>
+                ${annotations.map(annotation => `
+                    <div class="annotation">
+                        <strong>Page ${annotation.page}:</strong> 
+                        <a href="${annotation.url}" target="_blank">${annotation.title}</a>
+                    </div>
+                `).join('')}
+            </body>
+            </html>
+            `;
         }
 
-        function pdfToBase64() {
-            if (!pdfArrayBuffer) return null;
-            return btoa([...pdfArrayBuffer].map(b => String.fromCharCode(b)).join(''));
+        function copyEmbedCode() {
+            const embedCode = document.getElementById('embedCode').textContent;
+            navigator.clipboard.writeText(embedCode).then(() => {
+                alert('Embed code copied to clipboard!');
+            });
         }
 
-        function saveToLocalStorage() {
-            const base64 = pdfToBase64();
-            if (base64) {
-                localStorage.setItem('annotator_pdf', base64);
-                localStorage.setItem('annotator_annotations', JSON.stringify(annotations));
+        // Handle canvas clicks for existing annotations
+        canvas.addEventListener('click', function(e) {
+            if (isSelecting) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Check if click is on an annotation
+            const clickedAnnotation = annotations.find(annotation => 
+                annotation.page === pageNum &&
+                x >= annotation.x &&
+                x <= annotation.x + annotation.width &&
+                y >= annotation.y &&
+                y <= annotation.y + annotation.height
+            );
+            
+            if (clickedAnnotation) {
+                window.open(clickedAnnotation.url, '_blank');
             }
-        }
-
-        function loadFromLocalStorage() {
-            const savedPDF = localStorage.getItem('annotator_pdf');
-            const savedAnnotations = localStorage.getItem('annotator_annotations');
-
-            if (savedPDF && savedAnnotations) {
-                pdfArrayBuffer = Uint8Array.from(atob(savedPDF), c => c.charCodeAt(0));
-                const typedarray = new Uint8Array(pdfArrayBuffer);
-                annotations = JSON.parse(savedAnnotations);
-                loadPDF(typedarray);
-                updateAnnotationsList();
-                updateEmbedCode();
-            }
-        }
-
-        function clearProject() {
-            localStorage.removeItem('annotator_pdf');
-            localStorage.removeItem('annotator_annotations');
-            annotations = [];
-            pdfArrayBuffer = null;
-            document.getElementById('annotationsList').innerHTML = '';
-            document.getElementById('embedCode').value = '';
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            alert('Project cleared. Refresh or upload a new file.');
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            canvas = document.getElementById('pdfCanvas');
-            ctx = canvas.getContext('2d');
-            setupEventListeners();
-            loadFromLocalStorage();
         });
     </script>
 </body>
