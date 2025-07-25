@@ -334,6 +334,16 @@
         let selectionOverlay = null;
         let annotations = [];
         let currentSelection = null;
+let pdfBase64 = '';
+
+fileReader.onload = function(e) {
+    const typedarray = new Uint8Array(e.target.result);
+    loadPDF(typedarray);
+
+    // Encode base64 for embedding
+    const binary = e.target.result;
+    pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(binary)));
+};
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -630,30 +640,77 @@
         }
 
         function generateEmbedHTML() {
-            // This would generate a standalone HTML version of the annotated PDF
-            // For simplicity, we'll create a basic version
-            return `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Annotated PDF</title>
-                <style>
-                    body { font-family: Arial, sans-serif; padding: 20px; }
-                    .annotation { background: #f0f8ff; padding: 10px; margin: 10px 0; border-radius: 5px; }
-                </style>
-            </head>
-            <body>
-                <h2>Annotated PDF Links</h2>
-                ${annotations.map(annotation => `
-                    <div class="annotation">
-                        <strong>Page ${annotation.page}:</strong> 
-                        <a href="${annotation.url}" target="_blank">${annotation.title}</a>
-                    </div>
-                `).join('')}
-            </body>
-            </html>
-            `;
-        }
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Embedded Annotated PDF</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+        <style>
+            body { margin: 0; }
+            canvas { display: block; margin: 0 auto; }
+        </style>
+    </head>
+    <body>
+        <canvas id="pdfCanvas"></canvas>
+        <script>
+            const pdfData = atob("${pdfBase64}");
+
+            const annotations = ${JSON.stringify(annotations)};
+
+            const pdfjsLib = window['pdfjs-dist/build/pdf'];
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+            const loadingTask = pdfjsLib.getDocument({data: new Uint8Array([...pdfData].map(c => c.charCodeAt(0)))});
+            loadingTask.promise.then(function(pdf) {
+                pdf.getPage(1).then(function(page) {
+                    const scale = 1.0;
+                    const viewport = page.getViewport({scale});
+                    const canvas = document.getElementById('pdfCanvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    page.render({
+                        canvasContext: context,
+                        viewport: viewport
+                    }).promise.then(() => {
+                        // Draw links
+                        annotations.forEach(annotation => {
+                            if (annotation.page === 1) {
+                                context.strokeStyle = '#667eea';
+                                context.lineWidth = 2;
+                                context.setLineDash([5, 5]);
+                                context.strokeRect(annotation.x, annotation.y, annotation.width, annotation.height);
+                                context.setLineDash([]);
+                            }
+                        });
+
+                        // Add click listener
+                        canvas.addEventListener('click', function(e) {
+                            const rect = canvas.getBoundingClientRect();
+                            const x = e.clientX - rect.left;
+                            const y = e.clientY - rect.top;
+
+                            const clicked = annotations.find(a =>
+                                a.page === 1 &&
+                                x >= a.x && x <= a.x + a.width &&
+                                y >= a.y && y <= a.y + a.height
+                            );
+
+                            if (clicked) {
+                                window.open(clicked.url, '_blank');
+                            }
+                        });
+                    });
+                });
+            });
+        </script>
+    </body>
+    </html>
+    `;
+}
+
 
         function copyEmbedCode() {
             const embedCode = document.getElementById('embedCode').textContent;
